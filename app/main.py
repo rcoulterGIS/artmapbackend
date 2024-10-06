@@ -58,7 +58,7 @@ async def fetch_all_data():
 
 def offset_coordinates(lat: float, lon: float, index: int) -> tuple[float, float]:
     # Offset by a small amount (approx. 10-50 meters) based on the index
-    offset = (index + 1) * 0.0001
+    offset = (index + 0.5) * 0.0001
     angle = random.uniform(0, 2 * 3.14159)  # Random angle in radians
     lat_offset = offset * math.cos(angle)
     lon_offset = offset * math.sin(angle)
