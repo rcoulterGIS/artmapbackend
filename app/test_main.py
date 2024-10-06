@@ -32,9 +32,16 @@ async def mock_fetch_all_data():
         {
             "id": "1",
             "station_name": "Test Station",
-            "artist": "Test Artist",
-            "art_title": "Test Artwork",
-            "art_image_link": {"url": "https://example.com/image.jpg"}
+            "artist": "Test Artist 1",
+            "art_title": "Test Artwork 1",
+            "art_image_link": {"url": "https://example.com/image1.jpg"}
+        },
+        {
+            "id": "2",
+            "station_name": "Test Station",
+            "artist": "Test Artist 2",
+            "art_title": "Test Artwork 2",
+            "art_image_link": {"url": "https://example.com/image2.jpg"}
         }
     ]
     return (mock_stations_data, mock_artworks_data)
@@ -55,10 +62,11 @@ async def test_get_artworks(async_client, mock_fetch_all_data):
         response = await async_client.get("/artworks")
     assert response.status_code == 200
     artworks = response.json()
-    assert len(artworks) > 0
+    assert len(artworks) == 2
     assert all(isinstance(artwork, dict) for artwork in artworks)
     assert all('station_name' in artwork for artwork in artworks)
     assert all('art_image_link' in artwork and isinstance(artwork['art_image_link'], dict) for artwork in artworks)
+    assert all('latitude' in artwork and 'longitude' in artwork for artwork in artworks)
 
 @pytest.mark.asyncio
 async def test_get_artworks_with_filter(async_client, mock_fetch_all_data):
@@ -83,3 +91,13 @@ async def test_get_artwork_not_found(async_client, mock_fetch_all_data):
         response = await async_client.get("/artworks/nonexistent_id")
     assert response.status_code == 404
     assert response.json() == {"detail": "Artwork not found"}
+
+@pytest.mark.asyncio
+async def test_multiple_artworks_per_station(async_client, mock_fetch_all_data):
+    with patch('main.fetch_all_data', return_value=mock_fetch_all_data):
+        response = await async_client.get("/artworks")
+    assert response.status_code == 200
+    artworks = response.json()
+    assert len(artworks) == 2
+    assert artworks[0]['station_name'] == artworks[1]['station_name']
+    assert artworks[0]['latitude'] != artworks[1]['latitude'] or artworks[0]['longitude'] != artworks[1]['longitude']
