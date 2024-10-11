@@ -44,6 +44,23 @@ class Artwork(BaseModel):
     longitude: Optional[float] = None
     related_stations: List[RelatedStation] = Field(default_factory=list)
 
+class ArtworkSummary(BaseModel):
+    art_id: Optional[str] = None
+    art_title: Optional[str] = None
+    artist: Optional[str] = None
+    art_description: Optional[str] = None
+    art_image_link: Optional[ArtImageLink] = None
+
+class StationWithArtworks(BaseModel):
+    station_id: str
+    station_name: str
+    latitude: float
+    longitude: float
+    borough: Optional[str] = None
+    lines: str
+    artwork_count: int
+    artworks: List[ArtworkSummary]
+
 async def fetch_data(session: aiohttp.ClientSession, url: str) -> Dict[str, Any]:
     async with session.get(url) as response:
         return await response.json()
@@ -57,9 +74,8 @@ async def fetch_all_data():
     return stations_data, artworks_data
 
 def offset_coordinates(lat: float, lon: float, index: int) -> tuple[float, float]:
-    # Offset by a small amount (approx. 10-50 meters) based on the index
-    offset = (index + 0.5) * 0.0001
-    angle = random.uniform(0, 2 * 3.14159)  # Random angle in radians
+    offset = (index + 1) * 0.0001
+    angle = random.uniform(0, 2 * math.pi)
     lat_offset = offset * math.cos(angle)
     lon_offset = offset * math.sin(angle)
     return lat + lat_offset, lon + lon_offset
@@ -80,16 +96,13 @@ def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List
         ]
         
         if matching_stations:
-            # Use the first matching station's location
             station = matching_stations[0]
             base_lat = float(station.get('gtfs_latitude'))
             base_lon = float(station.get('gtfs_longitude'))
             
-            # Get the count of artworks for this station and increment it
             artwork_count = station_artwork_count.get(station_name, 0)
             station_artwork_count[station_name] = artwork_count + 1
             
-            # Offset coordinates if there's more than one artwork
             if artwork_count > 0:
                 lat, lon = offset_coordinates(base_lat, base_lon, artwork_count)
             else:
@@ -117,6 +130,49 @@ def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List
             merged_artworks.append(artwork_feature)
 
     return merged_artworks
+
+def aggregate_station_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List[StationWithArtworks]:
+    station_dict = {
+        feature['properties']['station_id']: {
+            **feature['properties'],
+            'latitude': float(feature['properties']['gtfs_latitude']),
+            'longitude': float(feature['properties']['gtfs_longitude']),
+            'artworks': []
+        }
+        for feature in stations['features']
+    }
+
+    for artwork in artworks:
+        station_name = artwork.get('station_name')
+        matching_stations = [
+            s for s in station_dict.values() 
+            if s['stop_name'].lower() == station_name.lower()
+        ]
+        
+        if matching_stations:
+            for station in matching_stations:
+                station['artworks'].append(ArtworkSummary(
+                    art_id=artwork.get('id'),
+                    art_title=artwork.get('art_title'),
+                    artist=artwork.get('artist'),
+                    art_description=artwork.get('art_description'),
+                    art_image_link=ArtImageLink(url=artwork.get('art_image_link', {}).get('url'))
+                ))
+
+    return [
+        StationWithArtworks(
+            station_id=station['station_id'],
+            station_name=station['stop_name'],
+            latitude=station['latitude'],
+            longitude=station['longitude'],
+            borough=station.get('borough'),
+            lines=station.get('daytime_routes', ''),
+            artwork_count=len(station['artworks']),
+            artworks=station['artworks']
+        )
+        for station in station_dict.values()
+        if station['artworks']
+    ]
 
 @app.get("/")
 async def root():
@@ -147,6 +203,21 @@ async def get_artwork(art_id: str):
             return Artwork(**artwork)
     
     raise HTTPException(status_code=404, detail="Artwork not found")
+
+@app.get("/stations-with-art", response_model=List[StationWithArtworks])
+async def get_stations_with_art(
+    borough: Optional[str] = Query(None, description="Filter by borough (M, Bk, Bx, Q)")
+):
+    stations_data, artworks_data = await fetch_all_data()
+    aggregated_data = aggregate_station_data(stations_data, artworks_data)
+    
+    if borough:
+        aggregated_data = [
+            station for station in aggregated_data
+            if station.borough == borough
+        ]
+    
+    return aggregated_data
 
 if __name__ == "__main__":
     import uvicorn
