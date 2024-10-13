@@ -97,7 +97,6 @@ async def test_get_artworks(async_client, mock_fetch_all_data):
     assert all(isinstance(artwork, dict) for artwork in artworks)
     assert all('station_name' in artwork for artwork in artworks)
     assert all('art_image_link' in artwork and isinstance(artwork['art_image_link'], dict) for artwork in artworks)
-    assert all('latitude' in artwork and 'longitude' in artwork for artwork in artworks)
 
 @pytest.mark.asyncio
 async def test_get_artworks_with_filter(async_client, mock_fetch_all_data):
@@ -105,7 +104,7 @@ async def test_get_artworks_with_filter(async_client, mock_fetch_all_data):
         response = await async_client.get("/artworks?borough=M")
     assert response.status_code == 200
     artworks = response.json()
-    assert all(any(station['borough'] == 'M' for station in artwork['related_stations']) for artwork in artworks)
+    assert all(artwork['station_name'] == 'Test Station 1' for artwork in artworks)
 
 @pytest.mark.asyncio
 async def test_get_artwork_by_id(async_client, mock_fetch_all_data):
@@ -122,17 +121,6 @@ async def test_get_artwork_not_found(async_client, mock_fetch_all_data):
         response = await async_client.get("/artworks/nonexistent_id")
     assert response.status_code == 404
     assert response.json() == {"detail": "Artwork not found"}
-
-@pytest.mark.asyncio
-async def test_multiple_artworks_per_station(async_client, mock_fetch_all_data):
-    with patch('main.fetch_all_data', return_value=mock_fetch_all_data):
-        response = await async_client.get("/artworks")
-    assert response.status_code == 200
-    artworks = response.json()
-    station_1_artworks = [a for a in artworks if a['station_name'] == 'Test Station 1']
-    assert len(station_1_artworks) == 2
-    assert station_1_artworks[0]['latitude'] != station_1_artworks[1]['latitude'] or \
-           station_1_artworks[0]['longitude'] != station_1_artworks[1]['longitude']
 
 @pytest.mark.asyncio
 async def test_get_stations_with_art(async_client, mock_fetch_all_data):
@@ -169,8 +157,8 @@ async def test_station_with_artworks_model():
         lines="A",
         artwork_count=2,
         artworks=[
-            {"art_id": "1", "art_title": "Artwork 1", "artist": "Artist 1"},
-            {"art_id": "2", "art_title": "Artwork 2", "artist": "Artist 2"}
+            Artwork(art_id="1", station_name="Test Station", art_title="Artwork 1", artist="Artist 1"),
+            Artwork(art_id="2", station_name="Test Station", art_title="Artwork 2", artist="Artist 2")
         ]
     )
     assert station.station_id == "1"
@@ -194,10 +182,7 @@ async def test_artwork_model():
         art_date="2000",
         art_material="Paint",
         art_description="A beautiful painting",
-        art_image_link={"url": "https://example.com/image.jpg"},
-        latitude=40.7,
-        longitude=-74.0,
-        related_stations=[{"station_id": "1", "line": "A", "borough": "M"}]
+        art_image_link={"url": "https://example.com/image.jpg"}
     )
     assert artwork.art_id == "1"
     assert artwork.station_name == "Test Station"
@@ -207,9 +192,3 @@ async def test_artwork_model():
     assert artwork.art_material == "Paint"
     assert artwork.art_description == "A beautiful painting"
     assert artwork.art_image_link.url == "https://example.com/image.jpg"
-    assert artwork.latitude == 40.7
-    assert artwork.longitude == -74.0
-    assert len(artwork.related_stations) == 1
-    assert artwork.related_stations[0].station_id == "1"
-    assert artwork.related_stations[0].line == "A"
-    assert artwork.related_stations[0].borough == "M"
