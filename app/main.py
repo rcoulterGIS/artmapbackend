@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 import asyncio
 import random
 import math
+import re
 
 app = FastAPI(title="NYC Subway Art API")
 
@@ -80,6 +81,26 @@ def offset_coordinates(lat: float, lon: float, index: int) -> tuple[float, float
     lon_offset = offset * math.sin(angle)
     return lat + lat_offset, lon + lon_offset
 
+
+def sanitize_text(text):
+    if not isinstance(text, str):
+        return text
+    
+    # Remove or replace problematic characters
+    text = re.sub(r'[^\x00-\x7F]+', '', text)  # Remove non-ASCII characters
+    text = text.replace('Ò', '"').replace('Ó', '"')  # Replace curly quotes
+    text = text.replace('É', 'E').replace('é', 'e')  # Replace accented E
+    text = text.replace('Â', 'A').replace('â', 'a')  # Replace accented A
+    text = text.replace('\n', ' ').replace('\r', '')  # Remove newlines and carriage returns
+    
+    # Remove extra spaces
+    text = ' '.join(text.split())
+    
+    return text
+
+
+
+
 def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     station_dict = {
         feature['properties']['station_id']: feature['properties'] 
@@ -89,10 +110,10 @@ def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List
     station_artwork_count = {}
 
     for artwork in artworks:
-        station_name = artwork.get('station_name')
+        station_name = sanitize_text(artwork.get('station_name', ''))
         matching_stations = [
             s for s in station_dict.values() 
-            if s.get('stop_name', '').lower() == station_name.lower()
+            if sanitize_text(s.get('stop_name', '')).lower() == station_name.lower()
         ]
         
         if matching_stations:
@@ -111,19 +132,19 @@ def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List
             artwork_feature = {
                 "art_id": artwork.get('id'),
                 "station_name": station_name,
-                "artist": artwork.get('artist'),
-                "art_title": artwork.get('art_title'),
-                "art_date": artwork.get('art_date'),
-                "art_material": artwork.get('art_material'),
-                "art_description": artwork.get('art_description'),
+                "artist": sanitize_text(artwork.get('artist')),
+                "art_title": sanitize_text(artwork.get('art_title')),
+                "art_date": sanitize_text(artwork.get('art_date')),
+                "art_material": sanitize_text(artwork.get('art_material')),
+                "art_description": sanitize_text(artwork.get('art_description')),
                 "art_image_link": {"url": artwork.get('art_image_link', {}).get('url')},
                 "latitude": lat,
                 "longitude": lon,
                 "related_stations": [
                     {
                         "station_id": s.get('station_id', ''),
-                        "line": s.get('daytime_routes', ''),
-                        "borough": s.get('borough', '')
+                        "line": sanitize_text(s.get('daytime_routes', '')),
+                        "borough": sanitize_text(s.get('borough', ''))
                     } for s in matching_stations
                 ]
             }

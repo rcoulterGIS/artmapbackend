@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient
-from main import app, fetch_all_data, StationWithArtworks, Artwork
+from main import app, fetch_all_data, StationWithArtworks, Artwork, sanitize_text, merge_data
 from unittest.mock import patch
 from httpx import ASGITransport
 
@@ -15,7 +15,7 @@ async def mock_fetch_all_data():
                 "type": "Feature",
                 "properties": {
                     "station_id": "1",
-                    "stop_name": "Test Station 1",
+                    "stop_name": "Test StationÒ 1",
                     "daytime_routes": "A",
                     "borough": "M",
                     "gtfs_latitude": "40.7",
@@ -30,7 +30,7 @@ async def mock_fetch_all_data():
                 "type": "Feature",
                 "properties": {
                     "station_id": "2",
-                    "stop_name": "Test Station 2",
+                    "stop_name": "Test StationÓ 2",
                     "daytime_routes": "B",
                     "borough": "Bk",
                     "gtfs_latitude": "40.8",
@@ -46,32 +46,32 @@ async def mock_fetch_all_data():
     mock_artworks_data = [
         {
             "id": "1",
-            "station_name": "Test Station 1",
-            "artist": "Test Artist 1",
-            "art_title": "Test Artwork 1",
+            "station_name": "Test StationÒ 1",
+            "artist": "Test ArtistÉ 1",
+            "art_title": "Test ArtworkÂ 1",
             "art_date": "2000",
             "art_material": "Paint",
-            "art_description": "A beautiful painting",
+            "art_description": "A beautiful paintingÒ with random charactersÓ",
             "art_image_link": {"url": "https://example.com/image1.jpg"}
         },
         {
             "id": "2",
-            "station_name": "Test Station 1",
+            "station_name": "Test StationÒ 1",
             "artist": "Test Artist 2",
             "art_title": "Test Artwork 2",
             "art_date": "2010",
             "art_material": "Sculpture",
-            "art_description": "An impressive sculpture",
+            "art_description": "An impressive sculptureÓ\nwith newlines",
             "art_image_link": {"url": "https://example.com/image2.jpg"}
         },
         {
             "id": "3",
-            "station_name": "Test Station 2",
+            "station_name": "Test StationÓ 2",
             "artist": "Test Artist 3",
             "art_title": "Test Artwork 3",
             "art_date": "2020",
             "art_material": "Mosaic",
-            "art_description": "A colorful mosaic",
+            "art_description": "A colorful mosaicÉ",
             "art_image_link": {"url": "https://example.com/image3.jpg"}
         }
     ]
@@ -98,6 +98,8 @@ async def test_get_artworks(async_client, mock_fetch_all_data):
     assert all('station_name' in artwork for artwork in artworks)
     assert all('art_image_link' in artwork and isinstance(artwork['art_image_link'], dict) for artwork in artworks)
     assert all('latitude' in artwork and 'longitude' in artwork for artwork in artworks)
+    assert all('"' not in artwork['station_name'] for artwork in artworks)
+    assert all('Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description'] for artwork in artworks)
 
 @pytest.mark.asyncio
 async def test_get_artworks_with_filter(async_client, mock_fetch_all_data):
@@ -115,6 +117,8 @@ async def test_get_artwork_by_id(async_client, mock_fetch_all_data):
     artwork = response.json()
     assert artwork["art_id"] == "1"
     assert isinstance(artwork["art_image_link"], dict)
+    assert '"' not in artwork['station_name']
+    assert 'Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description']
 
 @pytest.mark.asyncio
 async def test_get_artwork_not_found(async_client, mock_fetch_all_data):
@@ -147,6 +151,7 @@ async def test_get_stations_with_art(async_client, mock_fetch_all_data):
     assert all('artworks' in station for station in stations)
     assert stations[0]['artwork_count'] == 2
     assert stations[1]['artwork_count'] == 1
+    assert all('"' not in station['station_name'] for station in stations)
 
 @pytest.mark.asyncio
 async def test_get_stations_with_art_borough_filter(async_client, mock_fetch_all_data):
@@ -213,3 +218,26 @@ async def test_artwork_model():
     assert artwork.related_stations[0].station_id == "1"
     assert artwork.related_stations[0].line == "A"
     assert artwork.related_stations[0].borough == "M"
+
+def test_sanitize_text():
+    assert sanitize_text("Test StationÒ") == 'Test Station'  
+    assert sanitize_text("Test ArtistÉ") == 'Test Artist'
+    assert sanitize_text("Test ArtworkÂ") == 'Test Artwork'
+    assert sanitize_text("A beautiful paintingÒ with random charactersÓ") == 'A beautiful painting with random characters'  
+    assert sanitize_text("An impressive sculptureÓ\nwith newlines") == 'An impressive sculpture with newlines'  
+    assert sanitize_text(None) == None
+    assert sanitize_text(123) == 123
+
+@pytest.mark.asyncio
+async def test_merge_data_with_sanitization(mock_fetch_all_data):
+    stations_data, artworks_data = mock_fetch_all_data
+    merged_data = merge_data(stations_data, artworks_data)
+    
+    assert len(merged_data) == 3
+    assert merged_data[0]['station_name'] == 'Test Station 1'
+    assert merged_data[0]['artist'] == 'Test Artist 1'  
+    assert merged_data[0]['art_title'] == 'Test Artwork 1'  
+    assert merged_data[0]['art_description'] == 'A beautiful painting with random characters' 
+    assert merged_data[1]['art_description'] == 'An impressive sculpture with newlines'  
+    assert all('"' not in artwork['station_name'] for artwork in merged_data)
+    assert all('Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description'] for artwork in merged_data)
