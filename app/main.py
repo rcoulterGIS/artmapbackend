@@ -8,6 +8,7 @@ import random
 import math
 import re
 
+# initliaze app
 app = FastAPI(title="NYC Subway Art API")
 
 # Enable CORS
@@ -100,7 +101,7 @@ def sanitize_text(text):
 
 
 
-
+# primary function for joining data from the station and artwork apis
 def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     station_dict = {
         feature['properties']['station_id']: {
@@ -228,6 +229,7 @@ def aggregate_station_data(stations: Dict[str, Any], artworks: List[Dict[str, An
 async def root():
     return {"message": "Welcome to the NYC Subway Art API"}
 
+#primary endpoint
 @app.get("/artworks", response_model=List[Artwork])
 async def get_artworks(
     borough: Optional[str] = Query(None, description="Filter by borough (M, Bk, Bx, Q)")
@@ -254,6 +256,7 @@ async def get_artwork(art_id: str):
     
     raise HTTPException(status_code=404, detail="Artwork not found")
 
+#not used in app
 @app.get("/stations-with-art", response_model=List[StationWithArtworks])
 async def get_stations_with_art(
     borough: Optional[str] = Query(None, description="Filter by borough (M, Bk, Bx, Q)")
