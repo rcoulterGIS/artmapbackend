@@ -1,5 +1,5 @@
 # NYC Subway Art Explorer Backend
-This project is the frontend for the [NYC Subway Art Explorer](https://transitartmap.netlify.app/), a web application that visualizes artwork installations in New York City subway stations.
+This project is the frontend for the [NYC Subway Art Explorer](https://nycsubwayartexplorer.app/), a web application that visualizes artwork installations in New York City subway stations.
 
 This application runs using the [NYC Transit Art Explorer Frontend](https://github.com/rcoulterGIS/artmapfrontend). The frontend can be deployed locally for testing purposes. See the repository for details. 
 
@@ -116,4 +116,4 @@ The application sources data from the [NYC Open Data Catalog](https://opendata.c
 Data from the two sources is joined on station name and service lines, accomodating for the duplicate station name values across different stations.
 
 ## CI/CD
-The production backend of the application [https://transitartmap.netlify.app/](https://transitartmap.netlify.app/) is continuously integrated and deployed via Github Actions. Upon git push test_main.py is automatically run in a test environment hosted by Github. Upon successful completion of the tests, a build is triggered on [Heroku](https://dashboard.heroku.com/apps), the backend cloud hosting platform selected for this project. For more information about GitHub Actions, click [here](https://github.com/features/actions), and for integrating Heroku deployments with your CI/CD pipelines, click [here](https://www.heroku.com/continuous-integration).
+The production backend of the application [https://nycsubwayartexplorer.app/](https://nycsubwayartexplorer.app/) is continuously integrated and deployed via Github Actions. Upon git push test_main.py is automatically run in a test environment hosted by Github. Upon successful completion of the tests, a build is triggered on [Heroku](https://dashboard.heroku.com/apps), the backend cloud hosting platform selected for this project. For more information about GitHub Actions, click [here](https://github.com/features/actions), and for integrating Heroku deployments with your CI/CD pipelines, click [here](https://www.heroku.com/continuous-integration).
