@@ -15,8 +15,8 @@ async def mock_fetch_all_data():
                 "type": "Feature",
                 "properties": {
                     "station_id": "1",
-                    "stop_name": "Test StationÒ 1",
-                    "daytime_routes": "A",
+                    "stop_name": "125 St",
+                    "daytime_routes": "4,5,6",
                     "borough": "M",
                     "gtfs_latitude": "40.7",
                     "gtfs_longitude": "-74.0"
@@ -30,9 +30,9 @@ async def mock_fetch_all_data():
                 "type": "Feature",
                 "properties": {
                     "station_id": "2",
-                    "stop_name": "Test StationÓ 2",
-                    "daytime_routes": "B",
-                    "borough": "Bk",
+                    "stop_name": "125 St",
+                    "daytime_routes": "A,B,C,D",
+                    "borough": "M",
                     "gtfs_latitude": "40.8",
                     "gtfs_longitude": "-73.9"
                 },
@@ -40,38 +40,56 @@ async def mock_fetch_all_data():
                     "type": "Point",
                     "coordinates": [-73.9, 40.8]
                 }
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "station_id": "3",
+                    "stop_name": "Union Sq",
+                    "daytime_routes": "N,Q,R,W",
+                    "borough": "M",
+                    "gtfs_latitude": "40.6",
+                    "gtfs_longitude": "-74.1"
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [-74.1, 40.6]
+                }
             }
         ]
     }
     mock_artworks_data = [
         {
             "id": "1",
-            "station_name": "Test StationÒ 1",
-            "artist": "Test ArtistÉ 1",
-            "art_title": "Test ArtworkÂ 1",
+            "station_name": "125 St",
+            "line": "4,5,6",
+            "artist": "Artist 1",
+            "art_title": "Artwork 1",
             "art_date": "2000",
             "art_material": "Paint",
-            "art_description": "A beautiful paintingÒ with random charactersÓ",
+            "art_description": "Description 1",
             "art_image_link": {"url": "https://example.com/image1.jpg"}
         },
         {
             "id": "2",
-            "station_name": "Test StationÒ 1",
-            "artist": "Test Artist 2",
-            "art_title": "Test Artwork 2",
+            "station_name": "125 St",
+            "line": "A,B,C",
+            "artist": "Artist 2",
+            "art_title": "Artwork 2",
             "art_date": "2010",
             "art_material": "Sculpture",
-            "art_description": "An impressive sculptureÓ\nwith newlines",
+            "art_description": "Description 2",
             "art_image_link": {"url": "https://example.com/image2.jpg"}
         },
         {
             "id": "3",
-            "station_name": "Test StationÓ 2",
-            "artist": "Test Artist 3",
-            "art_title": "Test Artwork 3",
+            "station_name": "Union Sq",
+            "line": "N,Q,R",
+            "artist": "Artist 3",
+            "art_title": "Artwork 3",
             "art_date": "2020",
             "art_material": "Mosaic",
-            "art_description": "A colorful mosaicÉ",
+            "art_description": "Description 3",
             "art_image_link": {"url": "https://example.com/image3.jpg"}
         }
     ]
@@ -98,8 +116,6 @@ async def test_get_artworks(async_client, mock_fetch_all_data):
     assert all('station_name' in artwork for artwork in artworks)
     assert all('art_image_link' in artwork and isinstance(artwork['art_image_link'], dict) for artwork in artworks)
     assert all('latitude' in artwork and 'longitude' in artwork for artwork in artworks)
-    assert all('"' not in artwork['station_name'] for artwork in artworks)
-    assert all('Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description'] for artwork in artworks)
 
 @pytest.mark.asyncio
 async def test_get_artworks_with_filter(async_client, mock_fetch_all_data):
@@ -117,8 +133,6 @@ async def test_get_artwork_by_id(async_client, mock_fetch_all_data):
     artwork = response.json()
     assert artwork["art_id"] == "1"
     assert isinstance(artwork["art_image_link"], dict)
-    assert '"' not in artwork['station_name']
-    assert 'Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description']
 
 @pytest.mark.asyncio
 async def test_get_artwork_not_found(async_client, mock_fetch_all_data):
@@ -128,30 +142,24 @@ async def test_get_artwork_not_found(async_client, mock_fetch_all_data):
     assert response.json() == {"detail": "Artwork not found"}
 
 @pytest.mark.asyncio
-async def test_multiple_artworks_per_station(async_client, mock_fetch_all_data):
-    with patch('main.fetch_all_data', return_value=mock_fetch_all_data):
-        response = await async_client.get("/artworks")
-    assert response.status_code == 200
-    artworks = response.json()
-    station_1_artworks = [a for a in artworks if a['station_name'] == 'Test Station 1']
-    assert len(station_1_artworks) == 2
-    assert station_1_artworks[0]['latitude'] != station_1_artworks[1]['latitude'] or \
-           station_1_artworks[0]['longitude'] != station_1_artworks[1]['longitude']
-
-@pytest.mark.asyncio
 async def test_get_stations_with_art(async_client, mock_fetch_all_data):
     with patch('main.fetch_all_data', return_value=mock_fetch_all_data):
         response = await async_client.get("/stations-with-art")
     assert response.status_code == 200
     stations = response.json()
-    assert len(stations) == 2
+    assert len(stations) == 3
     assert all(isinstance(station, dict) for station in stations)
     assert all('station_name' in station for station in stations)
     assert all('artwork_count' in station for station in stations)
     assert all('artworks' in station for station in stations)
-    assert stations[0]['artwork_count'] == 2
-    assert stations[1]['artwork_count'] == 1
-    assert all('"' not in station['station_name'] for station in stations)
+
+    # Check specific stations
+    station_125_count = len([s for s in stations if s['station_name'] == '125 St'])
+    assert station_125_count == 2  # Two different 125 St stations
+    
+    union_square = next(s for s in stations if s['station_name'] == 'Union Sq')
+    assert union_square['artwork_count'] == 1
+    assert union_square['lines'] == 'N,Q,R,W'
 
 @pytest.mark.asyncio
 async def test_get_stations_with_art_borough_filter(async_client, mock_fetch_all_data):
@@ -159,9 +167,8 @@ async def test_get_stations_with_art_borough_filter(async_client, mock_fetch_all
         response = await async_client.get("/stations-with-art?borough=M")
     assert response.status_code == 200
     stations = response.json()
-    assert len(stations) == 1
-    assert stations[0]['borough'] == 'M'
-    assert stations[0]['artwork_count'] == 2
+    assert len(stations) == 3  # All stations are in Manhattan in our mock data
+    assert all(station['borough'] == 'M' for station in stations)
 
 @pytest.mark.asyncio
 async def test_station_with_artworks_model():
@@ -220,24 +227,100 @@ async def test_artwork_model():
     assert artwork.related_stations[0].borough == "M"
 
 def test_sanitize_text():
-    assert sanitize_text("Test StationÒ") == 'Test Station'  
+    assert sanitize_text("Test StationÒ") == 'Test Station'
     assert sanitize_text("Test ArtistÉ") == 'Test Artist'
     assert sanitize_text("Test ArtworkÂ") == 'Test Artwork'
-    assert sanitize_text("A beautiful paintingÒ with random charactersÓ") == 'A beautiful painting with random characters'  
-    assert sanitize_text("An impressive sculptureÓ\nwith newlines") == 'An impressive sculpture with newlines'  
+    assert sanitize_text("A beautiful paintingÒ with random charactersÓ") == 'A beautiful painting with random characters'
+    assert sanitize_text("An impressive sculptureÓ\nwith newlines") == 'An impressive sculpture with newlines'
     assert sanitize_text(None) == None
     assert sanitize_text(123) == 123
 
 @pytest.mark.asyncio
-async def test_merge_data_with_sanitization(mock_fetch_all_data):
+async def test_correct_station_line_matching(mock_fetch_all_data):
     stations_data, artworks_data = mock_fetch_all_data
     merged_data = merge_data(stations_data, artworks_data)
     
-    assert len(merged_data) == 3
-    assert merged_data[0]['station_name'] == 'Test Station 1'
-    assert merged_data[0]['artist'] == 'Test Artist 1'  
-    assert merged_data[0]['art_title'] == 'Test Artwork 1'  
-    assert merged_data[0]['art_description'] == 'A beautiful painting with random characters' 
-    assert merged_data[1]['art_description'] == 'An impressive sculpture with newlines'  
-    assert all('"' not in artwork['station_name'] for artwork in merged_data)
-    assert all('Ò' not in artwork['art_description'] and 'Ó' not in artwork['art_description'] for artwork in merged_data)
+    # Test artwork on 4,5,6 lines matches correct 125 St station
+    artwork_1 = next(a for a in merged_data if a['art_id'] == '1')
+    assert any(s['line'] == '4,5,6' for s in artwork_1['related_stations'])
+    assert artwork_1['latitude'] == 40.7
+    
+    # Test artwork on A,B,C lines matches correct 125 St station
+    artwork_2 = next(a for a in merged_data if a['art_id'] == '2')
+    assert any(s['line'] == 'A,B,C,D' for s in artwork_2['related_stations'])
+    assert artwork_2['latitude'] == 40.8
+
+@pytest.mark.asyncio
+async def test_partial_line_matching():
+    stations_data = {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "station_id": "1",
+                "stop_name": "Test Station",
+                "daytime_routes": "A,B,C,D",
+                "borough": "M",
+                "gtfs_latitude": "40.7",
+                "gtfs_longitude": "-74.0"
+            }
+        }]
+    }
+    artworks_data = [{
+        "id": "1",
+        "station_name": "Test Station",
+        "line": "A,C",  # Partial match with station lines
+        "artist": "Artist 1",
+        "art_title": "Artwork 1"
+    }]
+    
+    merged_data = merge_data(stations_data, artworks_data)
+    assert len(merged_data) == 1
+    assert merged_data[0]['art_id'] == '1'
+    assert any('A' in s['line'] and 'C' in s['line'] for s in merged_data[0]['related_stations'])
+
+@pytest.mark.asyncio
+async def test_line_normalization():
+    stations_data = {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "station_id": "1",
+                "stop_name": "Test Station",
+                "daytime_routes": "1-2-3",
+                "borough": "M",
+                "gtfs_latitude": "40.7",
+                "gtfs_longitude": "-74.0"
+            }
+        }]
+    }
+    artworks_data = [{
+        "id": "1",
+        "station_name": "Test Station",
+        "line": "1,2,3",  # Different format but same lines
+        "artist": "Artist 1",
+        "art_title": "Artwork 1"
+    }]
+    
+    merged_data = merge_data(stations_data, artworks_data)
+    assert len(merged_data) == 1
+    assert merged_data[0]['art_id'] == '1'
+
+
+@pytest.mark.asyncio
+async def test_multiple_artworks_same_station_different_location():
+    stations_data = {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "station_id": "1",
+                "stop_name": "Test Station",
+                "daytime_routes": "A,B",
+                "borough": "M",
+                "gtfs_latitude": "40.7",
+                "gtfs_longitude": "-74.0"
+            }
+        }]
+    }

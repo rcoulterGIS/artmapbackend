@@ -103,35 +103,66 @@ def sanitize_text(text):
 
 def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     station_dict = {
-        feature['properties']['station_id']: feature['properties'] 
+        feature['properties']['station_id']: {
+            **feature['properties'],
+            'latitude': float(feature['properties']['gtfs_latitude']),
+            'longitude': float(feature['properties']['gtfs_longitude'])
+        }
         for feature in stations['features']
     }
     merged_artworks = []
     station_artwork_count = {}
 
-    for artwork in artworks:
-        station_name = sanitize_text(artwork.get('station_name', ''))
-        matching_stations = [
-            s for s in station_dict.values() 
-            if sanitize_text(s.get('stop_name', '')).lower() == station_name.lower()
-        ]
+    def normalize_line(line: str) -> set:
+        if not line:
+            return set()
         
-        if matching_stations:
-            station = matching_stations[0]
-            base_lat = float(station.get('gtfs_latitude'))
-            base_lon = float(station.get('gtfs_longitude'))
+        # Standardize line names
+        line = (line.upper()
+                .replace('ACE', 'A,C,E')
+                .replace('BDFM', 'B,D,F,M')
+                .replace('NQR', 'N,Q,R')
+                .replace('NQRW', 'N,Q,R,W')
+                .replace('JZ', 'J,Z'))
+        
+        # Split on common separators
+        return {p.strip() for p in re.split(r'[,\s/-]+', line) if p.strip()}
+
+    def get_exact_station_match(artwork: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        station_name = sanitize_text(artwork.get('station_name', ''))
+        artwork_lines = normalize_line(artwork.get('line', ''))
+        
+        if not artwork_lines:  # If artwork has no line info, we can't make an exact match
+            return None
             
-            artwork_count = station_artwork_count.get(station_name, 0)
-            station_artwork_count[station_name] = artwork_count + 1
+        # Find station with matching name AND at least one matching line
+        for station in station_dict.values():
+            if (sanitize_text(station.get('stop_name', '')).lower() == station_name.lower()):
+                station_lines = normalize_line(station.get('daytime_routes', ''))
+                if bool(artwork_lines & station_lines):  # Check for any common lines
+                    return station
+        
+        return None
+
+    for artwork in artworks:
+        matching_station = get_exact_station_match(artwork)
+        
+        if matching_station:
+            # Get base coordinates from matched station
+            base_lat = matching_station['latitude']
+            base_lon = matching_station['longitude']
             
-            if artwork_count > 0:
-                lat, lon = offset_coordinates(base_lat, base_lon, artwork_count)
-            else:
-                lat, lon = base_lat, base_lon
+            # Track artwork count for this specific station
+            count_key = matching_station['station_id']
+            artwork_count = station_artwork_count.get(count_key, 0)
+            station_artwork_count[count_key] = artwork_count + 1
+            
+            # Calculate coordinates with offset if needed
+            lat, lon = (base_lat, base_lon) if artwork_count == 0 else offset_coordinates(base_lat, base_lon, artwork_count)
 
             artwork_feature = {
                 "art_id": artwork.get('id'),
-                "station_name": station_name,
+                "station_name": sanitize_text(artwork.get('station_name', '')),
                 "artist": sanitize_text(artwork.get('artist')),
                 "art_title": sanitize_text(artwork.get('art_title')),
                 "art_date": sanitize_text(artwork.get('art_date')),
@@ -140,13 +171,11 @@ def merge_data(stations: Dict[str, Any], artworks: List[Dict[str, Any]]) -> List
                 "art_image_link": {"url": artwork.get('art_image_link', {}).get('url')},
                 "latitude": lat,
                 "longitude": lon,
-                "related_stations": [
-                    {
-                        "station_id": s.get('station_id', ''),
-                        "line": sanitize_text(s.get('daytime_routes', '')),
-                        "borough": sanitize_text(s.get('borough', ''))
-                    } for s in matching_stations
-                ]
+                "related_stations": [{
+                    "station_id": matching_station.get('station_id', ''),
+                    "line": sanitize_text(matching_station.get('daytime_routes', '')),
+                    "borough": sanitize_text(matching_station.get('borough', ''))
+                }]
             }
             merged_artworks.append(artwork_feature)
 
